@@ -8,10 +8,6 @@ from .utils import \
     get_total_param, get_total_param_sum, \
     get_unit
 
-import sys
-sys.path.append('../')
-sys.path.append('..latent_diffusion')
-
 def singleton(class_):
     instances = {}
     def getinstance(*args, **kwargs):

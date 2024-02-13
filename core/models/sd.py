@@ -14,8 +14,8 @@ if module_path not in sys.path:
 module_path = os.path.abspath(os.path.join('ema'))
 if module_path not in sys.path:
     sys.path.append(module_path)
-from common.get_model import get_model, register
-from ema import LitEma
+from .common.get_model import get_model, register
+from .ema import LitEma
 
 version = '0'
 symbol = 'sd'
