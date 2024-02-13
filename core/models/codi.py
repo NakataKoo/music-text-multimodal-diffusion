@@ -21,11 +21,8 @@ symbol = 'codi'
 class CoDi(DDPM):
     def __init__(self,
                  audioldm_cfg,
-                 autokl_cfg,
                  optimus_cfg,
-                 clip_cfg,
                  clap_cfg,
-                 vision_scale_factor=0.1812,
                  text_scale_factor=4.3108,
                  audio_scale_factor=0.9228,
                  scale_by_std=False,
@@ -34,23 +31,17 @@ class CoDi(DDPM):
         super().__init__(*args, **kwargs)
         
         self.audioldm = get_model()(audioldm_cfg)
-        
-        self.autokl = get_model()(autokl_cfg)
             
         self.optimus = get_model()(optimus_cfg)
-            
-        self.clip = get_model()(clip_cfg)
             
         self.clap = get_model()(clap_cfg)
         
         if not scale_by_std:
-            self.vision_scale_factor = vision_scale_factor
             self.text_scale_factor = text_scale_factor
             self.audio_scale_factor = audio_scale_factor
         else:
             self.register_buffer("text_scale_factor", torch.tensor(text_scale_factor))
             self.register_buffer("audio_scale_factor", torch.tensor(audio_scale_factor))
-            self.register_buffer('vision_scale_factor', torch.tensor(vision_scale_factor))
 
         self.freeze()
         
@@ -62,17 +53,6 @@ class CoDi(DDPM):
     @property
     def device(self):
         return next(self.parameters()).device
-            
-    @torch.no_grad()
-    def autokl_encode(self, image):
-        encoder_posterior = self.autokl.encode(image)
-        z = encoder_posterior.sample().to(image.dtype)
-        return self.vision_scale_factor * z
-
-    @torch.no_grad()
-    def autokl_decode(self, z):
-        z = 1. / self.vision_scale_factor * z
-        return self.autokl.decode(z)
 
     @torch.no_grad()
     def optimus_encode(self, text):
@@ -124,14 +104,6 @@ class CoDi(DDPM):
         swap_type = self.clip.encode_type
         self.clip.encode_type = encode_type
         embedding = self.clip.encode(text)
-        self.clip.encode_type = swap_type
-        return embedding
-
-    @torch.no_grad()
-    def clip_encode_vision(self, vision, encode_type='encode_vision'):
-        swap_type = self.clip.encode_type
-        self.clip.encode_type = encode_type
-        embedding = self.clip.encode(vision)
         self.clip.encode_type = swap_type
         return embedding
     
@@ -192,11 +164,7 @@ class CoDi(DDPM):
             
             loss = 0.0
             for model_output_i, target_i, xtype_i in zip(model_output, target, xtype):
-                if xtype_i == 'image':
-                    loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3])
-                elif xtype_i == 'video':
-                    loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3, 4])
-                elif xtype_i == 'text':
+                if xtype_i == 'text':
                     loss_simple = self.get_text_loss(model_output_i, target_i).mean([1])
                 elif xtype_i == 'audio':
                     loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3])
@@ -217,11 +185,7 @@ class CoDi(DDPM):
             else:
                 raise NotImplementedError()
 
-            if xtype == 'image':
-                loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3])
-            elif xtype == 'video':
-                loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3, 4])
-            elif xtype == 'text':
+            if xtype == 'text':
                 loss_simple = self.get_text_loss(model_output, target).mean([1])
             elif xtype == 'audio':
                 loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3])

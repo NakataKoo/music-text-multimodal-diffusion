@@ -149,11 +149,7 @@ class DDIMSampler_VD(DDIMSampler):
         device = x[0].device
         dtype = x[0].dtype
         for i, xtype_i in enumerate(xtype):
-            if xtype_i == 'image':
-                extended_shape = (b, 1, 1, 1)
-            elif xtype_i == 'video':
-                extended_shape = (b, 1, 1, 1, 1)        
-            elif xtype_i == 'text':
+            if xtype_i == 'text':
                 extended_shape = (b, 1)
             elif xtype_i == 'audio':
                 extended_shape = (b, 1, 1, 1)    

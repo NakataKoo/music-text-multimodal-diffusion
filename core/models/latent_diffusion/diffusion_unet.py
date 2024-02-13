@@ -15,8 +15,6 @@ from .modules_conv import \
     checkpoint, conv_nd, linear, avg_pool_nd, \
     zero_module, normalization, timestep_embedding
 from .modules_attention import SpatialTransformer
-from .modules_video import SpatioTemporalAttention
-
 from ..common.get_model import get_model, register
 
 version = '0'
@@ -40,13 +38,6 @@ class TimestepBlock(nn.Module):
         """
         Apply the module to `x` given `emb` timestep embeddings.
         """
-
-class VideoSequential(nn.Sequential):
-    """
-    A sequential module that passes timestep embeddings to the children that
-    support it as an extra input.
-    """
-    pass
     
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     """
@@ -75,9 +66,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
                     x = rearrange(x, '(b t) c h w -> b c t h w', t=num_frames)
                 else:
                     x = layer(x, context)
-            elif isinstance(layer, SpatioTemporalAttention):
-                x = layer(x, x_0)
-            elif isinstance(layer, VideoSequential) or isinstance(layer, nn.ModuleList):
+            elif isinstance(layer, nn.ModuleList):
                 x = layer[0](x, emb)    
                 x = layer[1](x, x_0)    
             else:
@@ -216,13 +205,6 @@ class ConnectorOut(nn.Module):
             ),
         )
         self.use_temporal_attention = use_temporal_attention
-        if use_temporal_attention:
-            self.temporal_attention = SpatioTemporalAttention(
-                                dim = self.out_channels,
-                                dim_head = self.out_channels // 4,
-                                heads = 8,
-                                use_resnet = False,
-                              )
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         elif use_conv:
@@ -571,21 +553,10 @@ class UNetModel2D(nn.Module):
                     nn.Conv2d(input_channels, current_channel, 3, padding=1, bias=True))])
             for level_idx, mult in enumerate(channel_mult_connector):
                 for _ in range(num_noattn_blocks_connector[level_idx]):
-                    if use_video_architecture:
-                        layers = [nn.ModuleList([
-                            ResBlockPreset(
-                                current_channel, time_embed_dim,
-                                out_channels = mult * model_channels),
-                            SpatioTemporalAttention(
-                                    dim = mult * model_channels,
-                                    dim_head = mult * model_channels // video_dim_scale_factor,
-                                    heads = 8
-                                  )])]
-                    else:
-                        layers = [
-                            ResBlockPreset(
-                                current_channel, time_embed_dim,
-                                out_channels = mult * model_channels)]
+                    layers = [
+                        ResBlockPreset(
+                            current_channel, time_embed_dim,
+                            out_channels = mult * model_channels)]
 
                     current_channel = mult * model_channels
                     self.connecters_out.append(TimestepEmbedSequential(*layers))
@@ -620,21 +591,10 @@ class UNetModel2D(nn.Module):
         
         for level_idx, mult in enumerate(channel_mult):
             for _ in range(self.num_noattn_blocks[level_idx]):
-                if use_video_architecture:
-                    layers = [nn.ModuleList([
-                        ResBlockPreset(
-                            current_channel, time_embed_dim,
-                            out_channels = mult * model_channels),
-                        SpatioTemporalAttention(
-                                dim = mult * model_channels,
-                                dim_head = mult * model_channels // video_dim_scale_factor,
-                                heads = 8
-                              )])]
-                else:
-                    layers = [
-                        ResBlockPreset(
-                            current_channel, time_embed_dim,
-                            out_channels = mult * model_channels)]
+                layers = [
+                    ResBlockPreset(
+                        current_channel, time_embed_dim,
+                        out_channels = mult * model_channels)]
 
                 current_channel = mult * model_channels
                 dim_head = current_channel // num_heads
@@ -672,29 +632,11 @@ class UNetModel2D(nn.Module):
         #################
         # middle_blocks #
         #################
-        
-        if use_video_architecture:
-            layer1 = nn.ModuleList([
-                ResBlockPreset(
-                    current_channel, time_embed_dim),
-                SpatioTemporalAttention(
-                        dim = current_channel,
-                        dim_head = current_channel // video_dim_scale_factor,
-                        heads = 8
-                      )])
-            layer2 = nn.ModuleList([
-                ResBlockPreset(
-                    current_channel, time_embed_dim),
-                SpatioTemporalAttention(
-                        dim = current_channel,
-                        dim_head = current_channel // video_dim_scale_factor,
-                        heads = 8
-                      )])
-        else:
-            layer1 = ResBlockPreset(
-                current_channel, time_embed_dim)
-            layer2 = ResBlockPreset(
-                current_channel, time_embed_dim)
+
+        layer1 = ResBlockPreset(
+            current_channel, time_embed_dim)
+        layer2 = ResBlockPreset(
+            current_channel, time_embed_dim)
 
         middle_block = [
             layer1,
@@ -714,23 +656,11 @@ class UNetModel2D(nn.Module):
         for level_idx, mult in list(enumerate(channel_mult))[::-1]:
             for block_idx in range(self.num_noattn_blocks[level_idx] + 1):
                 extra_channel = input_block_channels.pop()
-                if use_video_architecture:
-                    layers = [nn.ModuleList([
-                        ResBlockPreset(
-                            current_channel + extra_channel,
-                            time_embed_dim,
-                            out_channels = model_channels * mult),
-                        SpatioTemporalAttention(
-                                dim = mult * model_channels,
-                                dim_head = mult * model_channels // video_dim_scale_factor,
-                                heads = 8
-                              )])]
-                else:
-                    layers = [
-                        ResBlockPreset(
-                            current_channel + extra_channel,
-                            time_embed_dim,
-                            out_channels = model_channels * mult) ]
+                layers = [
+                    ResBlockPreset(
+                        current_channel + extra_channel,
+                        time_embed_dim,
+                        out_channels = model_channels * mult) ]
                 
                 current_channel = model_channels * mult
                 dim_head = current_channel // num_heads

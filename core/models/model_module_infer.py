@@ -37,25 +37,7 @@ class model_module(pl.LightningModule):
     def decode(self, z, xtype):
         net = self.net
         z = z.cuda()
-        if xtype == 'image':
-            x = net.autokl_decode(z)
-            x = torch.clamp((x+1.0)/2.0, min=0.0, max=1.0)
-            x = [tvtrans.ToPILImage()(xi) for xi in x]
-            return x
-        
-        elif xtype == 'video':
-            num_frames = z.shape[2]
-            z = rearrange(z, 'b c f h w -> (b f) c h w')
-            x = net.autokl_decode(z) 
-            x = rearrange(x, '(b f) c h w -> b f c h w', f=num_frames)
-            
-            x = torch.clamp((x+1.0)/2.0, min=0.0, max=1.0)
-            video_list = []
-            for video in x:
-                video_list.append([tvtrans.ToPILImage()(xi) for xi in video])
-            return video_list
-
-        elif xtype == 'text':
+        if xtype == 'text':
             prompt_temperature = 1.0
             prompt_merge_same_adj_word = True
             x = net.optimus_decode(z, temperature=prompt_temperature)

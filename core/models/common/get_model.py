@@ -8,6 +8,10 @@ from .utils import \
     get_total_param, get_total_param_sum, \
     get_unit
 
+import sys
+sys.path.append('../')
+sys.path.append('..latent_diffusion')
+
 def singleton(class_):
     instances = {}
     def getinstance(*args, **kwargs):
@@ -43,19 +47,16 @@ class get_model(object):
     def __call__(self, cfg, verbose=True):
         """
         Construct model based on the config. 
+        「cfg」にインスタンスを渡す？
         """
         t = cfg.type
 
         # the register is in each file
         if t.find('audioldm')==0:
             from ..latent_diffusion.vae import audioldm
-        elif t.find('autoencoderkl')==0:
-            from ..latent_diffusion.vae import autokl
         elif t.find('optimus')==0:
             from ..latent_diffusion.vae import optimus
-            
-        elif t.find('clip')==0:
-            from ..encoders import clip
+
         elif t.find('clap')==0:
             from ..encoders import clap   
             

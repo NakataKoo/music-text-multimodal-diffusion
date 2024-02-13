@@ -6,9 +6,16 @@ import numpy.random as npr
 import copy
 from functools import partial
 from contextlib import contextmanager
-
-from .common.get_model import get_model, register
-from .ema import LitEma
+import os
+import sys
+module_path = os.path.abspath(os.path.join('common/get_model'))
+if module_path not in sys.path:
+    sys.path.append(module_path)
+module_path = os.path.abspath(os.path.join('ema'))
+if module_path not in sys.path:
+    sys.path.append(module_path)
+from common.get_model import get_model, register
+from ema import LitEma
 
 version = '0'
 symbol = 'sd'
