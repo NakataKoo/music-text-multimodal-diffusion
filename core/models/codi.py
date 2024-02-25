@@ -20,9 +20,9 @@ symbol = 'codi'
 @register('codi', version)
 class CoDi(DDPM):
     def __init__(self,
-                 audioldm_cfg,
-                 optimus_cfg,
-                 clap_cfg,
+                 audioldm_cfg, #AudioLDMの設定
+                 optimus_cfg, #Optimusの設定
+                 clap_cfg, #CLAPの設定
                  text_scale_factor=4.3108,
                  audio_scale_factor=0.9228,
                  scale_by_std=False,
@@ -54,8 +54,11 @@ class CoDi(DDPM):
     def device(self):
         return next(self.parameters()).device
 
+    # Optimus===========================================================================================================
+
     @torch.no_grad()
     def optimus_encode(self, text):
+        # 入力は["text1", "text2", ...]の形式
         if isinstance(text, List):
             tokenizer = self.optimus.tokenizer_encoder
             token = [tokenizer.tokenize(sentence.lower()) for sentence in text]
@@ -76,6 +79,8 @@ class CoDi(DDPM):
         z = 1.0 / self.text_scale_factor * z
         return self.optimus.decode(z, temperature)
     
+    # AudioLDM===========================================================================================================
+
     @torch.no_grad()
     def audioldm_encode(self, audio, time=2.0):
         encoder_posterior = self.audioldm.encode(audio, time=time)
@@ -89,6 +94,7 @@ class CoDi(DDPM):
         z = 1.0 / self.audio_scale_factor * z
         return self.audioldm.decode(z)
     
+    # Vocoder
     @torch.no_grad()
     def mel_spectrogram_to_waveform(self, mel):
         # Mel: [bs, 1, t-steps, fbins]
@@ -99,6 +105,8 @@ class CoDi(DDPM):
         waveform = waveform.cpu().detach().numpy()
         return waveform
     
+    # Contrastive Leraning===========================================================================================================
+
     @torch.no_grad()
     def clip_encode_text(self, text, encode_type='encode_text'):
         swap_type = self.clip.encode_type
@@ -112,16 +120,23 @@ class CoDi(DDPM):
         embedding = self.clap(audio)
         return embedding
 
+    # CoDi===========================================================================================================
+
     def forward(self, x=None, c=None, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
         if isinstance(x, list):
+            # tは0からself.num_timestepsの範囲のランダムな整数を持つテンソル
             t = torch.randint(0, self.num_timesteps, (x[0].shape[0],), device=x[0].device).long()
         else:
             t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=x.device).long()
         return self.p_losses(x, c, t, noise, xtype, ctype, u, return_algined_latents)
 
+    # U-Netによる逆拡散過程で、クリーンなデータを取得？
     def apply_model(self, x_noisy, t, cond, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
         return self.model.diffusion_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)
 
+    # losses===========================================================================================================
+
+    # スペクトルグラムの損失
     def get_pixel_loss(self, pred, target, mean=True):
         if self.loss_type == 'l1':
             loss = (target - pred).abs()
@@ -137,6 +152,7 @@ class CoDi(DDPM):
         loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=-0.0)
         return loss
 
+    # テキストの損失
     def get_text_loss(self, pred, target):
         if self.loss_type == 'l1':
             loss = (target - pred).abs()
@@ -145,16 +161,28 @@ class CoDi(DDPM):
         loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)    
         return loss
 
+    # 拡散モデルの損失
     def p_losses(self, x_start, cond, t, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
+        """
+        x_start: 元データ([data1, data2, ...]) 
+        xtypeはリスト: ['text', 'audio']のように複数のデータタイプを指定可能
+        """
+        # x_startがリストの場合（バッチ）
         if isinstance(x_start, list):
+            # ノイズ定義
             noise = [torch.randn_like(x_start_i) for x_start_i in x_start] if noise is None else noise
+            
+            # X_0のノイズを加える
             x_noisy = [self.q_sample(x_start=x_start_i, t=t, noise=noise_i) for x_start_i, noise_i in zip(x_start, noise)]
+            
+            # U-Netによる逆拡散過程で、クリーンなデータを「model_output」に代入？
             model_output = self.apply_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)
             if return_algined_latents:
                 return model_output
             
             loss_dict = {}
 
+            # ターゲットを「元データ」にするか「拡散過程で加えたノイズ（デフォルト）」にするか
             if self.parameterization == "x0":
                 target = x_start
             elif self.parameterization == "eps":
@@ -163,6 +191,7 @@ class CoDi(DDPM):
                 raise NotImplementedError()
             
             loss = 0.0
+            # loss計算（デフォルト：target=noise）
             for model_output_i, target_i, xtype_i in zip(model_output, target, xtype):
                 if xtype_i == 'text':
                     loss_simple = self.get_text_loss(model_output_i, target_i).mean([1])

@@ -46,6 +46,15 @@ def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2,
     return betas.numpy()
 
 def extract_into_tensor(a, t, x_shape):
+    """
+    複数のデータポイント（バッチ処理されたデータなど）から
+    特定のインデックスに対応する値を効率的に抽出し、
+    それらを特定の形状に再形成するために使用
+
+    a: 値を抽出する元となるテンソル
+    t: aから値を抽出するためのインデックスを指定するテンソル
+    x_shape: 出力テンソルの形状を指定
+    """
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
@@ -60,7 +69,7 @@ def highlight_print(info):
     
 class DDPM(nn.Module):
     def __init__(self,
-                 unet_config,
+                 unet_config, # U-Netの設定
                  timesteps=1000,
                  use_ema=True,
 
@@ -93,6 +102,7 @@ class DDPM(nn.Module):
         self.use_positional_encodings = use_positional_encodings
 
         from collections import OrderedDict
+        # Diffusion Modelの定義（Unetの設定値をもとに）（モデル名「diffusion_model」）
         self.model = nn.Sequential(OrderedDict([('diffusion_model', get_model()(unet_config))]))
 
         self.use_ema = use_ema
@@ -265,6 +275,7 @@ class DDPM(nn.Module):
         return self.p_sample_loop((batch_size, channels, image_size, image_size),
                                   return_intermediates=return_intermediates)
 
+    #拡散過程(ノイズを加える)(comprod: 累積積)
     def q_sample(self, x_start, t, noise=None):
         noise = torch.randn_like(x_start) if noise is None else noise
         return (extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
