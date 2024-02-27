@@ -9,18 +9,6 @@ from core.models.common.get_model import get_model
 import torch
 from core.models.ema import LitEma
 
-# データセットの前処理を定義します（例）=============================================
-def your_transforms():
-    return transforms.Compose([
-        transforms.ToTensor(),
-        # 必要に応じて他の変換を追加
-    ])
-
-# データセットのインスタンスを作成
-train_dataset = YourDataset(root='./data', transform=your_transforms())
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-
-
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
         return yaml.safe_load(file)
@@ -29,14 +17,6 @@ class ConfigObject(object):
     def __init__(self, dictionary):
         for key in dictionary:
             setattr(self, key, dictionary[key])
-
-
-### データセットの前処理とロード
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    # 他の前処理ステップがあればここに追加
-])
-
 
 
 ### モデルの定義=============================================
@@ -72,40 +52,3 @@ unet = ConfigObject(unet_cfg["openai_unet_codi"])
 # CoDiモデルのインスタンスを作成
 model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clap_cfg=clap, unet_config=unet)
 
-
-### 学習=============================================
-
-# 損失関数とオプティマイザ
-criterion = nn.CrossEntropyLoss()
-# optimizer = LitEma(model, lr=0.001, decay=0.9999)
-
-# 学習ループ
-num_epochs = 5
-for epoch in range(num_epochs):
-    model.train()
-    for batch_idx, (data, targets) in enumerate(train_loader):
-        # フォワードパス
-        outputs = model(data)
-        loss = criterion(outputs, targets)
-
-        # バックプロパゲーション
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-    # エポックの終了ごとにログを出力
-    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
-
-# モデルの評価
-model.eval()
-with torch.no_grad():
-    correct = 0
-    total = 0
-    for data, targets in test_loader:
-        outputs = model(data)
-        _, predicted = torch.max(outputs.data, 1)
-        total += targets.size(0)
-        correct += (predicted == targets).sum().item()
-
-accuracy = 100 * correct / total
-print(f'Accuracy of the model on the test images: {accuracy:.2f}%')
