@@ -132,6 +132,8 @@ class CoDi(DDPM):
 
     # U-Netによる逆拡散過程で、クリーンなデータを取得？
     def apply_model(self, x_noisy, t, cond, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
+        if x_noisy is None or t is None:
+            raise ValueError("x_noisy と t は None ではいけません")
         return self.model.diffusion_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)
 
     # losses===========================================================================================================

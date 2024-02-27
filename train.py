@@ -1,40 +1,83 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import yaml
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from core.models import codi
+from core.models.common.get_model import get_model
+import torch
+from core.models.ema import LitEma
 
-# データセットの前処理とロード
+# データセットの前処理を定義します（例）=============================================
+def your_transforms():
+    return transforms.Compose([
+        transforms.ToTensor(),
+        # 必要に応じて他の変換を追加
+    ])
+
+# データセットのインスタンスを作成
+train_dataset = YourDataset(root='./data', transform=your_transforms())
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+
+def load_yaml_config(filepath):
+    with open(filepath, 'r') as file:
+        return yaml.safe_load(file)
+
+class ConfigObject(object):
+    def __init__(self, dictionary):
+        for key in dictionary:
+            setattr(self, key, dictionary[key])
+
+
+### データセットの前処理とロード
 transform = transforms.Compose([
     transforms.ToTensor(),
     # 他の前処理ステップがあればここに追加
 ])
 
-train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
-test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-# モデルの定義
-class NeuralNet(nn.Module):
-    def __init__(self):
-        super(NeuralNet, self).__init__()
-        # モデルのアーキテクチャを定義
-        self.layer1 = nn.Linear(28*28, 64)
-        self.layer2 = nn.Linear(64, 10)
+### モデルの定義=============================================
 
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # フラット化
-        x = torch.relu(self.layer1(x))
-        x = self.layer2(x)
-        return x
+# AudioLDM
+audioldm_cfg = load_yaml_config('configs/model/audioldm.yaml')
+audioldm = ConfigObject(audioldm_cfg["audioldm_autoencoder"])
 
-model = NeuralNet()
+# Optimus
+optimus_cfg = load_yaml_config('configs/model/optimus.yaml')
+
+# optimus_vaeのconfigの辞書を、オブジェクトに置き換え
+optimus_cfg['optimus_vae']['args']['encoder'] = ConfigObject(optimus_cfg['optimus_bert_encoder'])
+optimus_cfg['optimus_vae']['args']['encoder'].args['config'] = ConfigObject(optimus_cfg['optimus_bert_encoder']['args']['config'])
+optimus_cfg['optimus_vae']['args']['decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder'])
+optimus_cfg['optimus_vae']['args']['decoder'].args['config'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder']['args']['config'])
+optimus_cfg['optimus_vae']['args']['tokenizer_encoder'] = ConfigObject(optimus_cfg['optimus_bert_tokenizer'])
+optimus_cfg['optimus_vae']['args']['tokenizer_decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_tokenizer'])
+optimus_cfg['optimus_vae']['args']['args'] = ConfigObject(optimus_cfg['optimus_vae']['args']['args'])
+optimus = ConfigObject(optimus_cfg["optimus_vae"])
+
+# CLAP
+clap_cfg = load_yaml_config('configs/model/clap.yaml')
+clap = ConfigObject(clap_cfg["clap_audio"])
+
+# CoDi
+unet_cfg = load_yaml_config('configs/model/openai_unet.yaml')
+unet_cfg["openai_unet_codi"]["args"]["unet_image_cfg"] = ConfigObject(unet_cfg["openai_unet_2d"])
+unet_cfg["openai_unet_codi"]["args"]["unet_text_cfg"] = ConfigObject(unet_cfg["openai_unet_0dmd"])
+unet_cfg["openai_unet_codi"]["args"]["unet_audio_cfg"] = ConfigObject(unet_cfg["openai_unet_2d_audio"])
+unet = ConfigObject(unet_cfg["openai_unet_codi"])
+
+# CoDiモデルのインスタンスを作成
+model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clap_cfg=clap, unet_config=unet)
+
+
+### 学習=============================================
 
 # 損失関数とオプティマイザ
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# optimizer = LitEma(model, lr=0.001, decay=0.9999)
 
 # 学習ループ
 num_epochs = 5

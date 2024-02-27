@@ -8,13 +8,6 @@ from functools import partial
 from contextlib import contextmanager
 import os
 import sys
-
-module_path = os.path.abspath(os.path.join('common/get_model'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
-module_path = os.path.abspath(os.path.join('ema'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
 from .common.get_model import get_model, register
 from .ema import LitEma
 
@@ -66,7 +59,7 @@ def highlight_print(info):
     print(''.join(['#']*(len(info)+4)))
     print('')
 
-    
+# 拡散モデルのベース    
 class DDPM(nn.Module):
     def __init__(self,
                  unet_config, # U-Netの設定
@@ -129,6 +122,7 @@ class DDPM(nn.Module):
         if self.learn_logvar:
             self.logvar = nn.Parameter(self.logvar, requires_grad=True)
 
+    # ノイズのレベルを制御するbetaを設定
     def register_schedule(self, 
                           given_betas=None, 
                           beta_schedule="linear", 
@@ -189,6 +183,7 @@ class DDPM(nn.Module):
         self.register_buffer('lvlb_weights', lvlb_weights, persistent=False)
         assert not torch.isnan(self.lvlb_weights).all()
 
+    # EMAを使用して、モデルの重みを更新
     @contextmanager
     def ema_scope(self, context=None):
         if self.use_ema:
@@ -204,7 +199,7 @@ class DDPM(nn.Module):
                 if context is not None:
                     print(f"{context}: Restored training weights")
 
-    def q_mean_variance(self, x_start, t):
+    # 指定されたタイムステップtにおけるノイズの分布q(x_t | x_0)の平均と分散を計算
         """
         Get the distribution q(x_t | x_0).
         :param x_start: the [N x C x ...] tensor of noiseless inputs.
@@ -216,6 +211,7 @@ class DDPM(nn.Module):
         log_variance = extract_into_tensor(self.log_one_minus_alphas_cumprod, t, x_start.shape)
         return mean, variance, log_variance
 
+    # ノイズから元のデータを推定
     def predict_start_from_noise(self, x_t, t, noise):
         value1 = extract_into_tensor(
             self.sqrt_recip_alphas_cumprod, t, x_t.shape)
@@ -223,6 +219,7 @@ class DDPM(nn.Module):
             self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
         return value1*x_t -value2*noise
 
+    # 指定されたタイムステップtにおける事後分布q(x_{t-1} | x_t, x_0)の平均と分散を計算
     def q_posterior(self, x_start, x_t, t):
         posterior_mean = (
                 extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start +
@@ -232,6 +229,7 @@ class DDPM(nn.Module):
         posterior_log_variance_clipped = extract_into_tensor(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
+    # 指定されたタイムステップtにおけるモデル(推定ノイズ)の平均と分散を計算
     def p_mean_variance(self, x, t, clip_denoised: bool):
         model_out = self.model(x, t)
         if self.parameterization == "eps":
@@ -244,6 +242,7 @@ class DDPM(nn.Module):
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
 
+    # 指定されたタイムステップtでのデノイジング
     @torch.no_grad()
     def p_sample(self, x, t, clip_denoised=True, repeat_noise=False):
         b, *_, device = *x.shape, x.device
@@ -253,6 +252,7 @@ class DDPM(nn.Module):
         nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
+    # 完全な逆拡散プロセスをシミュレート
     @torch.no_grad()
     def p_sample_loop(self, shape, return_intermediates=False):
         device = self.betas.device
@@ -268,6 +268,7 @@ class DDPM(nn.Module):
             return img, intermediates
         return img
 
+    # バッチ処理された画像のサンプル生成
     @torch.no_grad()
     def sample(self, batch_size=16, return_intermediates=False):
         image_size = self.image_size
@@ -275,12 +276,13 @@ class DDPM(nn.Module):
         return self.p_sample_loop((batch_size, channels, image_size, image_size),
                                   return_intermediates=return_intermediates)
 
-    #拡散過程(ノイズを加える)(comprod: 累積積)
+    #タイムステップtでノイズを加えたサンプル生成、拡散過程(ノイズを加える)(comprod: 累積積)
     def q_sample(self, x_start, t, noise=None):
         noise = torch.randn_like(x_start) if noise is None else noise
         return (extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
                 extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise)
 
+    # 損失の計算
     def get_loss(self, pred, target, mean=True):
         if self.loss_type == 'l1':
             loss = (target - pred).abs()
@@ -331,6 +333,7 @@ class DDPM(nn.Module):
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         return self.p_losses(x, t, *args, **kwargs)
 
+    # 各トレーニングバッチが終了した後に、EMAを使用してパラメータ更新実行
     def on_train_batch_end(self, *args, **kwargs):
         if self.use_ema:
             self.model_ema(self.model)

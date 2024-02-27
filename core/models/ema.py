@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+# Optimizer
 class LitEma(nn.Module):
     def __init__(self, model, decay=0.9999, use_num_updates=True):
         super().__init__()
@@ -21,7 +22,13 @@ class LitEma(nn.Module):
 
         self.collected_params = []
 
+    # モデルの各パラメータに対してEMAを適用
     def forward(self, model):
+        """
+        減衰率は、必要に応じて更新回数に基づいて動的に調整されます。
+        このメソッドは、モデルの学習中に繰り返し呼び出され、
+        各パラメータのシャドウコピーを現在のパラメータに近づけるように更新します。
+        """
         decay = self.decay
 
         if self.num_updates >= 0:
@@ -42,7 +49,12 @@ class LitEma(nn.Module):
                 else:
                     assert not key in self.m_name2s_name
 
+    # EMAによって更新されたシャドウパラメータをモデルのパラメータにコピー
     def copy_to(self, model):
+        """
+        これにより、モデルの重みがEMAによって平滑化された値に更新されます。
+        このメソッドは、評価時やモデルの保存時に利用されることがあります。
+        """
         m_param = dict(model.named_parameters())
         shadow_params = dict(self.named_buffers())
         for key in m_param:
@@ -51,6 +63,7 @@ class LitEma(nn.Module):
             else:
                 assert not key in self.m_name2s_name
 
+    # モデルの現在のパラメータを一時的に保存
     def store(self, parameters):
         """
         Save the current parameters for restoring later.
@@ -60,6 +73,7 @@ class LitEma(nn.Module):
         """
         self.collected_params = [param.clone() for param in parameters]
 
+    # storeメソッドによって保存されたパラメータをモデルに戻す
     def restore(self, parameters):
         """
         Restore the parameters stored with the `store` method.
