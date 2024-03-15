@@ -122,7 +122,8 @@ class CoDi(DDPM):
 
     # CoDi===========================================================================================================
 
-    def forward(self, x=None, c=None, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
+    # 学習の際に使う?
+    def forward(self, x=None, c=None, noise=None, xtype='audio', ctype='prompt', u=None, return_algined_latents=False):
         if isinstance(x, list):
             # tは0からself.num_timestepsの範囲のランダムな整数を持つテンソル
             t = torch.randint(0, self.num_timesteps, (x[0].shape[0],), device=x[0].device).long()
@@ -163,8 +164,8 @@ class CoDi(DDPM):
         loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)    
         return loss
 
-    # 拡散モデルの損失
-    def p_losses(self, x_start, cond, t, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
+    # 拡散モデルの損失（戻り値：loss）
+    def p_losses(self, x_start, cond, t, noise=None, xtype='audio', ctype='prompt', u=None, return_algined_latents=False):
         """
         x_start: 元データ([data1, data2, ...]) 
         xtypeはリスト: ['text', 'audio']のように複数のデータタイプを指定可能
@@ -174,10 +175,10 @@ class CoDi(DDPM):
             # ノイズ定義
             noise = [torch.randn_like(x_start_i) for x_start_i in x_start] if noise is None else noise
             
-            # X_0のノイズを加える
+            # X_0のノイズを加える(拡散過程)
             x_noisy = [self.q_sample(x_start=x_start_i, t=t, noise=noise_i) for x_start_i, noise_i in zip(x_start, noise)]
             
-            # U-Netによる逆拡散過程で、クリーンなデータを「model_output」に代入？
+            # U-Netによる逆拡散過程で、クリーンなデータ(予測したノイズ)を「model_output」に代入？
             model_output = self.apply_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)
             if return_algined_latents:
                 return model_output

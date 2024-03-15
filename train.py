@@ -8,6 +8,8 @@ from core.models import codi
 from core.models.common.get_model import get_model
 import torch
 from core.models.ema import LitEma
+from core.models.common.get_optimizer import get_optimizer
+from musiccaps import MusicCapsDataset
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
@@ -52,3 +54,34 @@ unet = ConfigObject(unet_cfg["openai_unet_codi"])
 # CoDiモデルのインスタンスを作成
 model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clap_cfg=clap, unet_config=unet)
 
+# データセット
+dataset = MusicCapsDataset(csv_file='musiccaps_public.csv',
+                           audio_dir='musiccaps_30')
+                           
+dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
+
+
+ema = LitEma(model)
+optimizer_config = {
+            'type': 'adam',
+            'args': {
+                 'weight_decay': 1e-4  # Weight decay
+            }
+        }
+optimizer_config = ConfigObject(optimizer_config)
+optimizer = get_optimizer()(model, optimizer_config)
+
+### 学習ループ=============================================
+for epoch in range(num_epochs=1):
+    for batch_idx, (texts, audios) in enumerate(dataloader):
+        # ここでモデルに入力を与え、損失を計算し、オプティマイザーを使用してモデルの重みを更新
+        optimizer.zero_grad()
+        loss = model.forward() #損失計算
+        loss.backward()
+        optimizer.step()
+
+        # EMAの更新
+        ema.update(model.parameters())
+
+        if batch_idx % 100 == 0:
+            print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()}')

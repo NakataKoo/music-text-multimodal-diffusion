@@ -41,8 +41,7 @@ def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2,
 def extract_into_tensor(a, t, x_shape):
     """
     複数のデータポイント（バッチ処理されたデータなど）から
-    特定のインデックスに対応する値を効率的に抽出し、
-    それらを特定の形状に再形成するために使用
+    特定の1時点tに対応する値を抽出
 
     a: 値を抽出する元となるテンソル
     t: aから値を抽出するためのインデックスを指定するテンソル
@@ -98,6 +97,7 @@ class DDPM(nn.Module):
         # Diffusion Modelの定義（Unetの設定値をもとに）（モデル名「diffusion_model」）
         self.model = nn.Sequential(OrderedDict([('diffusion_model', get_model()(unet_config))]))
 
+        # emaを使う場合, 「model_ema」にLitEmaのインスタンスを格納
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self.model)
