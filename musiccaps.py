@@ -1,8 +1,6 @@
 import os
 import pandas as pd
-import torch
-from torch.utils.data import Dataset, DataLoader
-from torchaudio.transforms import MelSpectrogram
+from torch.utils.data import Dataset
 import torchaudio
 
 class MusicCapsDataset(Dataset):
@@ -32,4 +30,4 @@ class MusicCapsDataset(Dataset):
         if self.transform:
             waveform = self.transform(waveform)
 
-        return waveform, sample_rate, caption
+        return waveform, caption
