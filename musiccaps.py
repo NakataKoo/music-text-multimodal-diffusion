@@ -32,4 +32,4 @@ class MusicCapsDataset(Dataset):
         if self.transform:
             waveform = self.transform(waveform)
 
-        return waveform, caption
+        return waveform, sample_rate, caption
