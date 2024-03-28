@@ -22,6 +22,7 @@ class CoDi(DDPM):
     def __init__(self,
                  audioldm_cfg, #AudioLDMの設定
                  optimus_cfg, #Optimusの設定
+                 clip_cfg, # CLIPの設定
                  clap_cfg, #CLAPの設定
                  text_scale_factor=4.3108,
                  audio_scale_factor=0.9228,
@@ -29,11 +30,10 @@ class CoDi(DDPM):
                  *args, 
                  **kwargs):
         super().__init__(*args, **kwargs)
-        
+    
         self.audioldm = get_model()(audioldm_cfg)
-            
         self.optimus = get_model()(optimus_cfg)
-            
+        self.clip = get_model()(clip_cfg)    
         self.clap = get_model()(clap_cfg)
         
         if not scale_by_std:
@@ -105,7 +105,7 @@ class CoDi(DDPM):
         waveform = waveform.cpu().detach().numpy()
         return waveform
     
-    # Contrastive Leraning===========================================================================================================
+    # Contrastive Leraning(Conditioning)===========================================================================================================
 
     @torch.no_grad()
     def clip_encode_text(self, text, encode_type='encode_text'):

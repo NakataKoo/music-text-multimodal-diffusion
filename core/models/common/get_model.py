@@ -55,7 +55,8 @@ class get_model(object):
 
         elif t.find('clap')==0:
             from ..encoders import clap   
-            
+        elif t.find('clip')==0:
+            from ..encoders import clip
         elif t.find('sd')==0:
             from .. import sd
         elif t.find('codi')==0:
