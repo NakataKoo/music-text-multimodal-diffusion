@@ -64,6 +64,7 @@ class STFT(torch.nn.Module):
         )
         input_data = input_data.squeeze(1)
 
+        forward_basis = self.forward_basis.to(input_data.device)  # self.forward_basis を入力データと同じデバイスに移動
         forward_transform = F.conv1d(
             input_data,
             torch.autograd.Variable(self.forward_basis, requires_grad=False).to(input_data.dtype),
