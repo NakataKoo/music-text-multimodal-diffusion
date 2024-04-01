@@ -53,6 +53,7 @@ class AudioAutoencoderKL(nn.Module):
 
     def encode(self, x, time=10.0):
         temp_dtype = x.dtype
+        self.fn_STFT = self.fn_STFT.to(x.device) # `self.fn_STFT`を`x`と同じGPUデバイスに移動
         x = wav_to_fbank(
                 x.float(), target_length=int(time * 102.4), fn_STFT=self.fn_STFT.float()
             ).to(x.device).to(temp_dtype)

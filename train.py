@@ -9,7 +9,6 @@ from core.models.common.get_model import get_model
 import torch
 from core.models.ema import LitEma
 from core.models.common.get_optimizer import get_optimizer
-from musiccaps import MusicCapsDataset
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
