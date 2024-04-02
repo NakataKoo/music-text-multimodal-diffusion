@@ -67,10 +67,10 @@ class STFT(torch.nn.Module):
         forward_basis = self.forward_basis.to(input_data.device)  # self.forward_basis を入力データと同じデバイスに移動
         forward_transform = F.conv1d(
             input_data,
-            torch.autograd.Variable(self.forward_basis, requires_grad=False).to(input_data.dtype),
+            torch.autograd.Variable(forward_basis, requires_grad=False).to(input_data.dtype),
             stride=self.hop_length,
             padding=0,
-        ).cpu()
+        ).cpu() # 修正: forward_basis を使用
 
         cutoff = int((self.filter_length / 2) + 1)
         real_part = forward_transform[:, :cutoff, :]
