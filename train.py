@@ -138,14 +138,13 @@ def model_define():
 
     return model
 
-model = model_define()
-
 # データセットの定義=============================================================
 class MusicCapsTTM(Dataset):
-    def __init__(self, csv_file, audio_dir, transform=None):
+    def __init__(self, csv_file, audio_dir, model, transform=None):
         self.audio_dir = audio_dir
         self.transform = transform
         self.data = []
+        self.model = model
         
         # CSVファイルを読み込む
         all_data = pd.read_csv(csv_file)
@@ -163,11 +162,11 @@ class MusicCapsTTM(Dataset):
         row = self.data[idx]
 
         caption = row['caption'] # 生テキスト
-        text_emb = model.module.clip_encode_text([caption])
+        text_emb = self.model.module.clip_encode_text([caption])
 
         audio_path = os.path.join(self.audio_dir, f"{row['ytid']}.wav")    
         waveform = torchaudio.load(audio_path) # 生波形データ（Tensor）
-        mel_latent = model.module.audioldm_encode(waveform[0]) # メルスペクトログラム（Tensor）の潜在表現に変換
+        mel_latent = self.model.module.audioldm_encode(waveform[0]) # メルスペクトログラム（Tensor）の潜在表現に変換
 
         if self.transform:
             pass
@@ -184,14 +183,13 @@ def cleanup():
     dist.destroy_process_group()
 
 def train(rank, world_size):
+    torch.cuda.set_device(rank)
     setup(rank, world_size)
-
-    # データセット
-    dataset = MusicCapsTTM(csv_file='/raid/m236866/md-mt/datasets/musiccaps/musiccaps-public.csv',
-                            audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30')
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
-    dataloader = DataLoader(dataset, batch_size=5, sampler=sampler, collate_fn=collate_fn)                        
-    #dataloader = DataLoader(dataset, batch_size=5, shuffle=True, collate_fn=collate_fn)
+    
+    # モデルを定義
+    model = model_define()
+    model = model.to(rank)
+    model = DDP(model, device_ids=[rank])
 
     # Optimizerの定義
     ema = LitEma(model)
@@ -203,11 +201,12 @@ def train(rank, world_size):
             }
     optimizer_config = ConfigObject(optimizer_config)
     optimizer = get_optimizer()(model, optimizer_config)
-
-    # モデルを指定されたデバイスに移動
-    model = model.to(rank)
-    ddp_model = DDP(model, device_ids=[rank])
     
+    # データセット
+    dataset = MusicCapsTTM(csv_file='/raid/m236866/md-mt/datasets/musiccaps/musiccaps-public.csv',
+                            audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', model=model)
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
+    dataloader = DataLoader(dataset, batch_size=5, sampler=sampler, collate_fn=collate_fn)                        
 
     # トレーニングループ
     num_epochs=2
@@ -215,13 +214,9 @@ def train(rank, world_size):
         for batch_idx, (texts, audios) in enumerate(dataloader):
             # ここでモデルに入力を与え、損失を計算し、オプティマイザーを使用してモデルの重みを更新
             optimizer.zero_grad()
-
-            audios
-
             loss = model.forward(x=audios, c=texts) #損失計算
             loss.backward()
             optimizer.step()
-
             # EMAの更新
             ema.update(model.parameters())
 
@@ -232,7 +227,7 @@ def train(rank, world_size):
 
 def main():
     # 使用するGPUの数
-    world_size = torch.cuda.device_count()
+    world_size = 3
     
     # トレーニングプロセスの起動
     spawn(train,
