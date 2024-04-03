@@ -1,6 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.distributed as dist
 import torchaudio
 import yaml
@@ -8,17 +6,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+import random
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from core.models import codi
-from core.models.common.get_model import get_model
 from core.models.ema import LitEma
 from core.models.common.get_optimizer import get_optimizer
-from torchaudio.transforms import MelSpectrogram
 from torch.multiprocessing import spawn
+from argparse import ArgumentParser
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
@@ -79,25 +79,6 @@ def plot_spectrogram(spec, title=None, ylabel='freq_bin', aspect='auto', xmax=No
 
 sample_rate = 48000
 
-# メルスペクトルグラムの取得========================================================
-n_fft = 1024
-win_length = None
-hop_length = 512
-n_mels = 128
-
-mel_spectrogram = MelSpectrogram(
-    sample_rate= 48000,
-    n_fft=n_fft,
-    win_length=win_length,
-    hop_length=hop_length,
-    center=True,
-    pad_mode="reflect",
-    power=2.0,
-    norm='slaney',
-    onesided=True,
-    n_mels=n_mels,
-)
-
 ### モデルの定義===============================================================
 
 def model_define():
@@ -140,11 +121,13 @@ def model_define():
 
 # データセットの定義=============================================================
 class MusicCapsTTM(Dataset):
-    def __init__(self, csv_file, audio_dir, model, transform=None):
+    def __init__(self, csv_file, audio_dir, model, x, c, transform=None):
         self.audio_dir = audio_dir
         self.transform = transform
         self.data = []
         self.model = model
+        self.x = x
+        self.c = c
         
         # CSVファイルを読み込む
         all_data = pd.read_csv(csv_file)
@@ -160,36 +143,45 @@ class MusicCapsTTM(Dataset):
 
     def __getitem__(self, idx):
         row = self.data[idx]
-
         caption = row['caption'] # 生テキスト
-        text_emb = self.model.module.clip_encode_text([caption])
-
         audio_path = os.path.join(self.audio_dir, f"{row['ytid']}.wav")    
         waveform = torchaudio.load(audio_path) # 生波形データ（Tensor）
-        mel_latent = self.model.module.audioldm_encode(waveform[0]) # メルスペクトログラム（Tensor）の潜在表現に変換
 
-        if self.transform:
-            pass
-
-        return text_emb, mel_latent 
+        if self.x == "audio" and self.c == "text":
+            mel_latent = self.model.module.audioldm_encode(waveform[0]) # メルスペクトログラム（Tensor）の潜在表現に変換
+            text_emb = self.model.module.clip_encode_text([caption])
+            return mel_latent, text_emb # data, condition
+        elif self.x == "text" and self.c == "audio":
+            text_latent = self.model.module.optimus_encode([caption])
+            audio_emb = self.model.module.clap_encode_audio(waveform[0])
+            return text_latent, audio_emb # data, condition
 
 ### 学習ループ=============================================
 
+def train():
+    # DDP
+    parser = ArgumentParser('DDP usage example')
+    parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
+    args = parser.parse_args()
 
-def setup(rank, world_size):
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    args.is_master = args.local_rank == 0
+    # init
+    dist.init_process_group(backend='nccl', init_method='env://')
+    torch.cuda.set_device(args.local_rank)
 
-def cleanup():
-    dist.destroy_process_group()
+    # シード固定
+    torch.cuda.manual_seed_all(42)
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
 
-def train(rank, world_size):
-    torch.cuda.set_device(rank)
-    setup(rank, world_size)
-    
+    x = "audio"
+    c = "text"
+
     # モデルを定義
     model = model_define()
-    model = model.to(rank)
-    model = DDP(model, device_ids=[rank])
+    model = model.cuda()
+    model = DDP(model, device_ids=[args.local_rank])
 
     # Optimizerの定義
     ema = LitEma(model)
@@ -204,36 +196,28 @@ def train(rank, world_size):
     
     # データセット
     dataset = MusicCapsTTM(csv_file='/raid/m236866/md-mt/datasets/musiccaps/musiccaps-public.csv',
-                            audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', model=model)
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
-    dataloader = DataLoader(dataset, batch_size=5, sampler=sampler, collate_fn=collate_fn)                        
+                            audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', model=model, x=x, c=c)
+    sampler = DistributedSampler(dataset, rank=args.local_rank)
+    dataloader = DataLoader(dataset, batch_size=5, sampler=sampler, collate_fn=collate_fn, pin_memory=True)                        
 
     # トレーニングループ
     num_epochs=2
     for epoch in range(num_epochs):
-        for batch_idx, (texts, audios) in enumerate(dataloader):
-            # ここでモデルに入力を与え、損失を計算し、オプティマイザーを使用してモデルの重みを更新
+        dist.barrier()
+        for batch_idx, (data, condition) in enumerate(dataloader):
             optimizer.zero_grad()
-            loss = model.forward(x=audios, c=texts) #損失計算
+            data = data.cuda()
+            condition = condition.cuda()
+            loss = model.forward(x=data, c=condition) #損失計算
             loss.backward()
             optimizer.step()
             # EMAの更新
             ema.update(model.parameters())
 
-            if batch_idx % 100 == 0:
-                print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()}')
+            running_loss += loss*data.size(0)
 
-    cleanup()
-
-def main():
-    # 使用するGPUの数
-    world_size = 3
-    
-    # トレーニングプロセスの起動
-    spawn(train,
-          args=(world_size,),
-          nprocs=world_size,
-          join=True)
+        dist.all_reduce(running_loss, op=dist.ReduceOp.SUM)
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
-    main()
+    train()
