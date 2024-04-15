@@ -223,5 +223,5 @@ def train():
     dist.destroy_process_group()
 
 if __name__ == "__main__":
-    # 学習
+    # 学習実行
     train()
