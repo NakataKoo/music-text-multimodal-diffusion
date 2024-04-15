@@ -90,7 +90,8 @@ class DDPM(nn.Module):
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self.model)
-            print_log(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+            #print_log(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
         self.v_posterior = v_posterior
         self.l_simple_weight = l_simple_weight
@@ -177,14 +178,16 @@ class DDPM(nn.Module):
             self.model_ema.store(self.model.parameters())
             self.model_ema.copy_to(self.model)
             if context is not None:
-                print_log(f"{context}: Switched to EMA weights")
+                #print_log(f"{context}: Switched to EMA weights")
+                print(f"{context}: Switched to EMA weights")
         try:
             yield None
         finally:
             if self.use_ema:
                 self.model_ema.restore(self.model.parameters())
                 if context is not None:
-                    print_log(f"{context}: Restored training weights")
+                    #print_log(f"{context}: Restored training weights")
+                    print(f"{context}: Restored training weights")
 
     def q_mean_variance(self, x_start, t):
         """

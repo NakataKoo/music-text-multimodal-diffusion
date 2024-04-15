@@ -10,7 +10,6 @@ from torch.utils.data import Dataset, DataLoader
 from core.models import codi
 from core.models.ema import LitEma
 from core.models.common.get_optimizer import get_optimizer
-from torch.multiprocessing import spawn
 from argparse import ArgumentParser
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -99,7 +98,7 @@ def model_define():
     clap_cfg = load_yaml_config('configs/model/clap.yaml')
     clap = ConfigObject(clap_cfg["clap_audio"])
 
-    # CoDi
+    # Unet
     unet_cfg = load_yaml_config('configs/model/openai_unet.yaml')
     unet_cfg["openai_unet_codi"]["args"]["unet_image_cfg"] = ConfigObject(unet_cfg["openai_unet_2d"])
     unet_cfg["openai_unet_codi"]["args"]["unet_text_cfg"] = ConfigObject(unet_cfg["openai_unet_0dmd"])
@@ -110,8 +109,12 @@ def model_define():
     clip_cfg = load_yaml_config('configs/model/clip.yaml')
     clip = ConfigObject(clip_cfg["clip_frozen"])
 
+    # AutoKL
+    autokl_cfg = load_yaml_config('configs/model/sd.yaml')
+    autokl = ConfigObject(autokl_cfg["sd_autoencoder"])
+
     # CoDiモデルのインスタンスを作成
-    model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clip_cfg=clip, clap_cfg=clap, unet_config=unet)
+    model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clip_cfg=clip, clap_cfg=clap, autokl_cfg=autokl, unet_config=unet)
 
     return model
 
