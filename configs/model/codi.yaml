@@ -19,4 +19,4 @@ codi:
     vision_scale_factor: 0.18215
     text_scale_factor: 4.3108
     audio_scale_factor: 0.9228
-    use_ema: false
+    use_ema: true

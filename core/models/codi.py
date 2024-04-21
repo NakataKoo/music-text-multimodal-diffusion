@@ -33,14 +33,11 @@ class CoDi(DDPM):
                  **kwargs):
         super().__init__(*args, **kwargs)
         
+        # CoDiに内包される各LDM・対照学習モデルのインスタンス化
         self.audioldm = get_model()(audioldm_cfg)
-        
-        self.autokl = get_model()(autokl_cfg)
-            
+        # self.autokl = get_model()(autokl_cfg)
         self.optimus = get_model()(optimus_cfg)
-            
         self.clip = get_model()(clip_cfg)
-            
         self.clap = get_model()(clap_cfg)
         
         if not scale_by_std:
@@ -52,7 +49,8 @@ class CoDi(DDPM):
             self.register_buffer("audio_scale_factor", torch.tensor(audio_scale_factor))
             self.register_buffer('vision_scale_factor', torch.tensor(vision_scale_factor))
 
-        self.freeze()
+        # self.freeze()
+        # self.device()
         
     def freeze(self):
         self.eval()
@@ -63,6 +61,8 @@ class CoDi(DDPM):
     def device(self):
         return next(self.parameters()).device
             
+    # autokl===========================================================================================================
+
     @torch.no_grad()
     def autokl_encode(self, image):
         encoder_posterior = self.autokl.encode(image)

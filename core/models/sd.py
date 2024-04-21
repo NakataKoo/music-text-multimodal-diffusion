@@ -84,6 +84,7 @@ class DDPM(nn.Module):
         self.clip_denoised = clip_denoised
         self.use_positional_encodings = use_positional_encodings
 
+        # openai_unet.yamlの設定を初期値として、UNetをインスタンス化
         from collections import OrderedDict
         self.model = nn.Sequential(OrderedDict([('diffusion_model', get_model()(unet_config))]))
 

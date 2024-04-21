@@ -14,6 +14,9 @@ from argparse import ArgumentParser
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+from core.models.common.get_model import get_model
+import warnings
+warnings.filterwarnings('ignore')
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
@@ -114,7 +117,16 @@ def model_define():
     autokl = ConfigObject(autokl_cfg["sd_autoencoder"])
 
     # CoDiモデルのインスタンスを作成
-    model = codi.CoDi(audioldm_cfg=audioldm, optimus_cfg=optimus, clip_cfg=clip, clap_cfg=clap, autokl_cfg=autokl, unet_config=unet)
+    codi_cfg = load_yaml_config('configs/model/codi.yaml')
+    codi_cfg["codi"]["args"]["audioldm_cfg"] = audioldm
+    codi_cfg["codi"]["args"]["autokl_cfg"] = autokl
+    codi_cfg["codi"]["args"]["optimus_cfg"] = optimus
+    codi_cfg["codi"]["args"]["clip_cfg"] = clip
+    codi_cfg["codi"]["args"]["clap_cfg"] = clap
+    codi_cfg["codi"]["args"]["unet_config"] = unet
+    codi = ConfigObject(codi_cfg["codi"])
+
+    model = get_model()(codi)
 
     return model
 
@@ -181,7 +193,7 @@ def train():
     print("model difine")
     model = model_define()
     model = model.cuda()
-    model = DDP(model, device_ids=[args.local_rank])
+    model = DDP(model, device_ids=[args.local_rank]) # ここで DistributedDataParallel is not needed when a module doesn't have any parameter that requires a gradient.
 
     # Optimizerの定義
     ema = LitEma(model)

@@ -520,6 +520,7 @@ class QKVAttention(nn.Module):
 
 from functools import partial
 
+# "openai_unet_2d": UNetModel2D=========================================================================================================
 @register('openai_unet_2d', version)
 class UNetModel2D(nn.Module):
     def __init__(self,
@@ -904,7 +905,7 @@ class FCBlock_MultiDim(FCBlock):
         y = y.view(*shape[0:-n], *self.out_channels_multidim)
         return y
 
-    
+# "openai_unet_0dmd": UNetModel0D_MultiDim=========================================================================================================
 @register('openai_unet_0dmd', version)
 class UNetModel0D_MultiDim(nn.Module):
     def __init__(self,
@@ -1121,13 +1122,13 @@ def create_dummy_class():
         dummy_class_item.output_block_connecters_in.append(None)
     return dummy_class_item            
             
-                                             
+# "openai_unet_codi": UNetModelCoDi（CoDiの本体）=========================================================================================================
 @register('openai_unet_codi', version)
 class UNetModelCoDi(nn.Module):
     def __init__(self,
-                 unet_image_cfg,  
-                 unet_text_cfg, 
-                 unet_audio_cfg,
+                 unet_image_cfg, # Image(Video) Unet
+                 unet_text_cfg, # Text Unet
+                 unet_audio_cfg, # Audio Unet
                  model_type):
 
         super().__init__()
@@ -1153,7 +1154,8 @@ class UNetModelCoDi(nn.Module):
         if 'video_interp' in model_type:
             self.unet_video_interp = get_model()(unet_image_cfg)
             self.video_interp_model_channels = self.unet_video_interp.model_channels
-            
+    
+    # core/models/codiのself.model.diffusion_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)で呼ばれる？    
     def forward(self, x, timesteps, condition, xtype, condition_types, x_0=[None], x_0_type='first_frame', mix_weight={'audio': 1, 'text': 1, 'image': 1}):
         
         # Prepare conditioning

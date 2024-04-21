@@ -33,7 +33,7 @@ def preprocess_model_args(args):
 @singleton
 class get_model(object):
     def __init__(self):
-        self.model = {}
+        self.model = {} # {"audioldm_autoencoder": AudioAutoencoderKLクラス, "openai_unet_codi": UNetModelCoDiクラス, ...}
         self.version = {}
 
     def register(self, model, name, version='x'):
@@ -66,14 +66,15 @@ class get_model(object):
         elif t.find('openai_unet')==0:
             from ..latent_diffusion import diffusion_unet
         
-        args = preprocess_model_args(cfg.args)
-        net = self.model[t](**args)
-
-        return net
+        args = preprocess_model_args(cfg.args) # argsは各モデルのYAMLファイルの「args」に対応
+        net = self.model[t](**args) # self.model = {"audioldm_autoencoder": AudioAutoencoderKLクラス, "openai_unet_codi": UNetModelCoDiクラス, ...}
+                                    # モデルのクラスに上記の「args」を初期値として入力し、モデルをインスタンス化
+        return net # モデルのインスタンスを返す（get_model()(config)によって呼び出される）
 
     def get_version(self, name):
         return self.version[name]
 
+# 各LDMモデルのクラスを登録するデコレータとして使用
 def register(name, version='x'):
     def wrapper(class_):
         get_model().register(class_, name, version)
