@@ -1126,34 +1126,36 @@ def create_dummy_class():
 @register('openai_unet_codi', version)
 class UNetModelCoDi(nn.Module):
     def __init__(self,
-                 unet_image_cfg, # Image(Video) Unet
+                 # unet_image_cfg, # Image(Video) Unet
                  unet_text_cfg, # Text Unet
                  unet_audio_cfg, # Audio Unet
-                 model_type):
+                 model_type,
+                 x, # data type
+                 ):
 
         super().__init__()
         
-        if 'video' in model_type or 'image' in model_type:
-            self.unet_image = get_model()(unet_image_cfg)
-            self.image_model_channels = self.unet_image.model_channels
-        else:
-            self.unet_image = create_dummy_class()
-            
-        if 'text' in model_type:
+        #if 'video' in model_type or 'image' in model_type:
+        #    self.unet_image = get_model()(unet_image_cfg)
+        #    self.image_model_channels = self.unet_image.model_channels
+        #else:
+        #    self.unet_image = create_dummy_class()
+        #    
+        if 'text' in model_type and x == "text":
             self.unet_text = get_model()(unet_text_cfg)
             self.text_model_channels = self.unet_text.model_channels
         else:
             self.unet_text = create_dummy_class()
                                              
-        if 'audio' in model_type:
+        if 'audio' in model_type and x == "audio":
             self.unet_audio = get_model()(unet_audio_cfg)
             self.audio_model_channels = self.unet_audio.model_channels
         else:
             self.unet_audio = create_dummy_class()
 
-        if 'video_interp' in model_type:
-            self.unet_video_interp = get_model()(unet_image_cfg)
-            self.video_interp_model_channels = self.unet_video_interp.model_channels
+        #if 'video_interp' in model_type:
+        #    self.unet_video_interp = get_model()(unet_image_cfg)
+        #    self.video_interp_model_channels = self.unet_video_interp.model_channels
     
     # core/models/codiのself.model.diffusion_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)で呼ばれる？    
     def forward(self, x, timesteps, condition, xtype, condition_types, x_0=[None], x_0_type='first_frame', mix_weight={'audio': 1, 'text': 1, 'image': 1}):

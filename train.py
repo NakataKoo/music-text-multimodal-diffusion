@@ -79,56 +79,68 @@ sample_rate = 48000
 
 ### モデルの定義===============================================================
 
-def model_define():
-    # AudioLDM
-    audioldm_cfg = load_yaml_config('configs/model/audioldm.yaml')
-    audioldm = ConfigObject(audioldm_cfg["audioldm_autoencoder"])
+def model_define(x, c):
 
-    # Optimus
-    optimus_cfg = load_yaml_config('configs/model/optimus.yaml')
+    if x == "audio" and c == "text":
+        # AudioLDM
+        audioldm_cfg = load_yaml_config('configs/model/audioldm.yaml')
+        audioldm = ConfigObject(audioldm_cfg["audioldm_autoencoder"])
 
-    # optimus_vaeのconfigの辞書を、オブジェクトに置き換え
-    optimus_cfg['optimus_vae']['args']['encoder'] = ConfigObject(optimus_cfg['optimus_bert_encoder'])
-    optimus_cfg['optimus_vae']['args']['encoder'].args['config'] = ConfigObject(optimus_cfg['optimus_bert_encoder']['args']['config'])
-    optimus_cfg['optimus_vae']['args']['decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder'])
-    optimus_cfg['optimus_vae']['args']['decoder'].args['config'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder']['args']['config'])
-    optimus_cfg['optimus_vae']['args']['tokenizer_encoder'] = ConfigObject(optimus_cfg['optimus_bert_tokenizer'])
-    optimus_cfg['optimus_vae']['args']['tokenizer_decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_tokenizer'])
-    optimus_cfg['optimus_vae']['args']['args'] = ConfigObject(optimus_cfg['optimus_vae']['args']['args'])
-    optimus = ConfigObject(optimus_cfg["optimus_vae"])
+        # CLIP
+        clip_cfg = load_yaml_config('configs/model/clip.yaml')
+        clip = ConfigObject(clip_cfg["clip_frozen"])
 
-    # CLAP
-    clap_cfg = load_yaml_config('configs/model/clap.yaml')
-    clap = ConfigObject(clap_cfg["clap_audio"])
+        # Unet
+        unet_cfg = load_yaml_config('configs/model/openai_unet.yaml')
+        unet_cfg["openai_unet_codi"]["args"]["unet_audio_cfg"] = ConfigObject(unet_cfg["openai_unet_2d_audio"])
+        unet = ConfigObject(unet_cfg["openai_unet_codi"])
 
-    # Unet
-    unet_cfg = load_yaml_config('configs/model/openai_unet.yaml')
-    unet_cfg["openai_unet_codi"]["args"]["unet_image_cfg"] = ConfigObject(unet_cfg["openai_unet_2d"])
-    unet_cfg["openai_unet_codi"]["args"]["unet_text_cfg"] = ConfigObject(unet_cfg["openai_unet_0dmd"])
-    unet_cfg["openai_unet_codi"]["args"]["unet_audio_cfg"] = ConfigObject(unet_cfg["openai_unet_2d_audio"])
-    unet = ConfigObject(unet_cfg["openai_unet_codi"])
+        # CoDiモデルのインスタンスを作成
+        codi_cfg = load_yaml_config('configs/model/codi.yaml')
+        codi_cfg["codi"]["args"]["audioldm_cfg"] = audioldm
+        codi_cfg["codi"]["args"]["clip_cfg"] = clip
+        codi_cfg["codi"]["args"]["unet_config"] = unet
+        codi = ConfigObject(codi_cfg["codi"])
 
-    # CLIP
-    clip_cfg = load_yaml_config('configs/model/clip.yaml')
-    clip = ConfigObject(clip_cfg["clip_frozen"])
+        model = get_model()(codi)
+        return model
+
+    elif x == "text" and c == "audio":
+        # Optimus
+        optimus_cfg = load_yaml_config('configs/model/optimus.yaml')
+
+        # optimus_vaeのconfigの辞書を、オブジェクトに置き換え
+        optimus_cfg['optimus_vae']['args']['encoder'] = ConfigObject(optimus_cfg['optimus_bert_encoder'])
+        optimus_cfg['optimus_vae']['args']['encoder'].args['config'] = ConfigObject(optimus_cfg['optimus_bert_encoder']['args']['config'])
+        optimus_cfg['optimus_vae']['args']['decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder'])
+        optimus_cfg['optimus_vae']['args']['decoder'].args['config'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder']['args']['config'])
+        optimus_cfg['optimus_vae']['args']['tokenizer_encoder'] = ConfigObject(optimus_cfg['optimus_bert_tokenizer'])
+        optimus_cfg['optimus_vae']['args']['tokenizer_decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_tokenizer'])
+        optimus_cfg['optimus_vae']['args']['args'] = ConfigObject(optimus_cfg['optimus_vae']['args']['args'])
+        optimus = ConfigObject(optimus_cfg["optimus_vae"])
+
+        # CLAP
+        clap_cfg = load_yaml_config('configs/model/clap.yaml')
+        clap = ConfigObject(clap_cfg["clap_audio"])
+
+        # Unet
+        unet_cfg = load_yaml_config('configs/model/openai_unet.yaml')
+        unet_cfg["openai_unet_codi"]["args"]["unet_text_cfg"] = ConfigObject(unet_cfg["openai_unet_0dmd"])
+        unet = ConfigObject(unet_cfg["openai_unet_codi"])
+
+        # CoDiモデルのインスタンスを作成
+        codi_cfg = load_yaml_config('configs/model/codi.yaml')
+        codi_cfg["codi"]["args"]["optimus_cfg"] = optimus
+        codi_cfg["codi"]["args"]["clap_cfg"] = clap
+        codi_cfg["codi"]["args"]["unet_config"] = unet
+        codi = ConfigObject(codi_cfg["codi"])
+
+        model = get_model()(codi)
+        return model
 
     # AutoKL
-    autokl_cfg = load_yaml_config('configs/model/sd.yaml')
-    autokl = ConfigObject(autokl_cfg["sd_autoencoder"])
-
-    # CoDiモデルのインスタンスを作成
-    codi_cfg = load_yaml_config('configs/model/codi.yaml')
-    codi_cfg["codi"]["args"]["audioldm_cfg"] = audioldm
-    codi_cfg["codi"]["args"]["autokl_cfg"] = autokl
-    codi_cfg["codi"]["args"]["optimus_cfg"] = optimus
-    codi_cfg["codi"]["args"]["clip_cfg"] = clip
-    codi_cfg["codi"]["args"]["clap_cfg"] = clap
-    codi_cfg["codi"]["args"]["unet_config"] = unet
-    codi = ConfigObject(codi_cfg["codi"])
-
-    model = get_model()(codi)
-
-    return model
+    #autokl_cfg = load_yaml_config('configs/model/sd.yaml')
+    #autokl = ConfigObject(autokl_cfg["sd_autoencoder"])
 
 # データセットの定義=============================================================
 class MusicCaps(Dataset):
@@ -169,7 +181,7 @@ class MusicCaps(Dataset):
 
 ### 学習ループ=============================================
 
-def train():
+def train(x, c):
     # DDP
     parser = ArgumentParser('DDP usage example')
     parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
@@ -186,12 +198,9 @@ def train():
     np.random.seed(42)
     random.seed(42)
 
-    x = "audio"
-    c = "text"
-
     # モデルを定義
     print("model difine")
-    model = model_define()
+    model = model_define(x, c)
     model = model.cuda()
     model = DDP(model, device_ids=[args.local_rank]) # ここで DistributedDataParallel is not needed when a module doesn't have any parameter that requires a gradient.
 
@@ -239,4 +248,6 @@ def train():
 
 if __name__ == "__main__":
     # 学習実行
-    train()
+    x = "audio"
+    c = "text"
+    train(x, c)

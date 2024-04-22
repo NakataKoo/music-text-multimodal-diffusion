@@ -21,7 +21,7 @@ symbol = 'codi'
 class CoDi(DDPM):
     def __init__(self,
                  audioldm_cfg,
-                 autokl_cfg,
+                 # autokl_cfg,
                  optimus_cfg,
                  clip_cfg,
                  clap_cfg,
@@ -33,13 +33,15 @@ class CoDi(DDPM):
                  **kwargs):
         super().__init__(*args, **kwargs)
         
-        # CoDiに内包される各LDM・対照学習モデルのインスタンス化
-        self.audioldm = get_model()(audioldm_cfg)
-        # self.autokl = get_model()(autokl_cfg)
-        self.optimus = get_model()(optimus_cfg)
-        self.clip = get_model()(clip_cfg)
-        self.clap = get_model()(clap_cfg)
+        if "audio" in self.unet_config.args["x"]:
+            self.audioldm = get_model()(audioldm_cfg)
+            self.clip = get_model()(clip_cfg)
+        else:
+            self.optimus = get_model()(optimus_cfg)
+            self.clap = get_model()(clap_cfg)
         
+        # self.autokl = get_model()(autokl_cfg)
+
         if not scale_by_std:
             self.vision_scale_factor = vision_scale_factor
             self.text_scale_factor = text_scale_factor

@@ -8,7 +8,7 @@ codi:
   find_unused_parameters: true
   args:
     audioldm_cfg: MODEL(audioldm_autoencoder)
-    autokl_cfg: MODEL(sd_autoencoder)
+    # autokl_cfg: MODEL(sd_autoencoder)
     optimus_cfg: MODEL(optimus_vae)
     clip_cfg: MODEL(clip_frozen)
     clap_cfg: MODEL(clap_audio)
@@ -20,3 +20,4 @@ codi:
     text_scale_factor: 4.3108
     audio_scale_factor: 0.9228
     use_ema: true
+    

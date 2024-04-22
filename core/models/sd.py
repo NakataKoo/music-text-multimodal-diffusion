@@ -72,7 +72,8 @@ class DDPM(nn.Module):
                  parameterization="eps",
                  use_positional_encodings=False,
                  learn_logvar=False, 
-                 logvar_init=0, ):
+                 logvar_init=0,
+                 ):
 
         super().__init__()
         assert parameterization in ["eps", "x0"], \
@@ -83,6 +84,7 @@ class DDPM(nn.Module):
         self.cond_stage_model = None
         self.clip_denoised = clip_denoised
         self.use_positional_encodings = use_positional_encodings
+        self.unet_config = unet_config
 
         # openai_unet.yamlの設定を初期値として、UNetをインスタンス化
         from collections import OrderedDict
