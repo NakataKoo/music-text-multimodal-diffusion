@@ -208,7 +208,7 @@ def train(x, c):
     print("model difine")
     model = model_define(x, c)
     model = model.to(args.local_rank) #cuda()より変更
-    model = DDP(model, device_ids=[args.local_rank])
+    model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank)
 
     # Optimizerの定義
     ema = LitEma(model)
