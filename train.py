@@ -184,16 +184,19 @@ class MusicCaps(Dataset):
 ### 学習ループ=============================================
 
 def train(x, c):
+
     # DDP
     parser = ArgumentParser('DDP usage example')
     parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
     args = parser.parse_args()
 
+    args.is_master = args.local_rank == 0
+
     # init
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl', init_method='env://')
 
-    args.is_master = args.local_rank == 0
+    print(args.local_rank)
 
     # シード固定
     torch.cuda.manual_seed_all(42)
@@ -204,7 +207,7 @@ def train(x, c):
     # モデルを定義
     print("model difine")
     model = model_define(x, c)
-    model = model.cuda()
+    model = model.to(args.local_rank) #cuda()より変更
     model = DDP(model, device_ids=[args.local_rank])
 
     # Optimizerの定義
@@ -241,11 +244,13 @@ def train(x, c):
     num_epochs=2
     running_loss = 0
     for epoch in range(num_epochs):
+        model.train()
         dist.barrier()
         for batch_idx, (data, condition) in enumerate(dataloader):
+            print("epoch", epoch, "batch", batch_idx)
             optimizer.zero_grad()
-            data = data.cuda()
-            condition = condition.cuda()
+            data = data.to(args.local_rank) #.cuda()から変更
+            condition = condition.to(args.local_rank) #.cuda()から変更
             loss = model.forward(x=data, c=condition) #損失計算
             loss.backward()
             optimizer.step()
@@ -260,6 +265,10 @@ def train(x, c):
     dist.destroy_process_group()
 
 if __name__ == "__main__":
+
+    #os.environ['MASTER_ADDR'] = 'localhost'
+    #os.environ['MASTER_PORT'] = '12345'
+
     # 学習実行
     mp.set_start_method('spawn', force=True)
     x = "audio"

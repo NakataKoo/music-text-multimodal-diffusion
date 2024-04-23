@@ -79,7 +79,7 @@ class DDPM(nn.Module):
         assert parameterization in ["eps", "x0"], \
             'currently only supporting "eps" and "x0"'
         self.parameterization = parameterization
-        highlight_print("Running in {} mode".format(self.parameterization))
+        print("Running in {} mode".format(self.parameterization))
 
         self.cond_stage_model = None
         self.clip_denoised = clip_denoised
