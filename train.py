@@ -207,8 +207,8 @@ def train(x, c):
     # モデルを定義
     print("model difine")
     model = model_define(x, c)
-    model = model.to(args.local_rank) #cuda()より変更
-    model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank)
+    model = model.to(args.local_rank)
+    model = DDP(model, device_ids=[args.local_rank])
 
     # Optimizerの定義
     ema = LitEma(model)
@@ -249,8 +249,8 @@ def train(x, c):
         for batch_idx, (data, condition) in enumerate(dataloader):
             print("epoch", epoch, "batch", batch_idx)
             optimizer.zero_grad()
-            data = data.to(args.local_rank) #.cuda()から変更
-            condition = condition.to(args.local_rank) #.cuda()から変更
+            data = data.to(args.local_rank)
+            condition = condition.to(args.local_rank)
             loss = model.forward(x=data, c=condition) #損失計算
             loss.backward()
             optimizer.step()
@@ -266,11 +266,7 @@ def train(x, c):
 
 if __name__ == "__main__":
 
-    #os.environ['MASTER_ADDR'] = 'localhost'
-    #os.environ['MASTER_PORT'] = '12345'
-
     # 学習実行
-    mp.set_start_method('spawn', force=True)
     x = "audio"
     c = "text"
     train(x, c)
