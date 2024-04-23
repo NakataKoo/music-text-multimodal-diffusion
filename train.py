@@ -17,6 +17,8 @@ from torch.utils.data.distributed import DistributedSampler
 from core.models.common.get_model import get_model
 import warnings
 warnings.filterwarnings('ignore')
+import torch.multiprocessing as mp
+
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
@@ -187,10 +189,11 @@ def train(x, c):
     parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
     args = parser.parse_args()
 
-    args.is_master = args.local_rank == 0
     # init
-    dist.init_process_group(backend='nccl', init_method='env://')
     torch.cuda.set_device(args.local_rank)
+    dist.init_process_group(backend='nccl', init_method='env://')
+
+    args.is_master = args.local_rank == 0
 
     # シード固定
     torch.cuda.manual_seed_all(42)
@@ -202,7 +205,7 @@ def train(x, c):
     print("model difine")
     model = model_define(x, c)
     model = model.cuda()
-    model = DDP(model, device_ids=[args.local_rank]) # ここで DistributedDataParallel is not needed when a module doesn't have any parameter that requires a gradient.
+    model = DDP(model, device_ids=[args.local_rank])
 
     # Optimizerの定義
     ema = LitEma(model)
@@ -218,15 +221,25 @@ def train(x, c):
     print("data load")
     # データセット
     dataset = MusicCaps(csv_file='/raid/m236866/md-mt/datasets/musiccaps/musiccaps-public.csv',
-                            audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', model=model, x=x, c=c)
+                        audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', 
+                        model=model, 
+                        x=x, 
+                        c=c)
     sampler = DistributedSampler(dataset, rank=args.local_rank)
-    dataloader = DataLoader(dataset, batch_size=6, sampler=sampler, collate_fn=collate_fn, pin_memory=True, num_workers=os.cpu_count())                
+    dataloader = DataLoader(dataset, 
+                            batch_size=6, 
+                            sampler=sampler, 
+                            collate_fn=collate_fn, 
+                            pin_memory=True, 
+                            num_workers=os.cpu_count(), 
+                            multiprocessing_context='spawn')                
 
     torch.backends.cudnn.benchmark = True
 
     print("train start")
     # トレーニングループ
     num_epochs=2
+    running_loss = 0
     for epoch in range(num_epochs):
         dist.barrier()
         for batch_idx, (data, condition) in enumerate(dataloader):
@@ -248,6 +261,7 @@ def train(x, c):
 
 if __name__ == "__main__":
     # 学習実行
+    mp.set_start_method('spawn', force=True)
     x = "audio"
     c = "text"
     train(x, c)
