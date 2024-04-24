@@ -33,7 +33,7 @@ class CoDi(DDPM):
                  **kwargs):
         super().__init__(*args, **kwargs)
         
-        if "audio" in self.unet_config.args["x"]:
+        if os.environ["XTYPE"] == "audio":
             self.audioldm = get_model()(audioldm_cfg)
             self.clip = get_model()(clip_cfg)
         else:

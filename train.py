@@ -38,7 +38,7 @@ def collate_fn(batch):
     texts = torch.stack(texts)
     return texts, audios_padded
 
-# 音声可視化========================================================
+# Audio Plot========================================================
 def plot_waveform(waveform, sample_rate, title="Waveform", xlim=None, ylim=None):
   waveform = waveform.numpy()
 
@@ -79,7 +79,7 @@ def plot_spectrogram(spec, title=None, ylabel='freq_bin', aspect='auto', xmax=No
 
 sample_rate = 48000
 
-### モデルの定義===============================================================
+### Model Define===============================================================
 
 def model_define(x, c):
 
@@ -97,7 +97,7 @@ def model_define(x, c):
         unet_cfg["openai_unet_codi"]["args"]["unet_audio_cfg"] = ConfigObject(unet_cfg["openai_unet_2d_audio"])
         unet = ConfigObject(unet_cfg["openai_unet_codi"])
 
-        # CoDiモデルのインスタンスを作成
+        # CoDi
         codi_cfg = load_yaml_config('configs/model/codi.yaml')
         codi_cfg["codi"]["args"]["audioldm_cfg"] = audioldm
         codi_cfg["codi"]["args"]["clip_cfg"] = clip
@@ -110,8 +110,6 @@ def model_define(x, c):
     elif x == "text" and c == "audio":
         # Optimus
         optimus_cfg = load_yaml_config('configs/model/optimus.yaml')
-
-        # optimus_vaeのconfigの辞書を、オブジェクトに置き換え
         optimus_cfg['optimus_vae']['args']['encoder'] = ConfigObject(optimus_cfg['optimus_bert_encoder'])
         optimus_cfg['optimus_vae']['args']['encoder'].args['config'] = ConfigObject(optimus_cfg['optimus_bert_encoder']['args']['config'])
         optimus_cfg['optimus_vae']['args']['decoder'] = ConfigObject(optimus_cfg['optimus_gpt2_decoder'])
@@ -130,7 +128,7 @@ def model_define(x, c):
         unet_cfg["openai_unet_codi"]["args"]["unet_text_cfg"] = ConfigObject(unet_cfg["openai_unet_0dmd"])
         unet = ConfigObject(unet_cfg["openai_unet_codi"])
 
-        # CoDiモデルのインスタンスを作成
+        # CoDi
         codi_cfg = load_yaml_config('configs/model/codi.yaml')
         codi_cfg["codi"]["args"]["optimus_cfg"] = optimus
         codi_cfg["codi"]["args"]["clap_cfg"] = clap
@@ -144,7 +142,7 @@ def model_define(x, c):
     #autokl_cfg = load_yaml_config('configs/model/sd.yaml')
     #autokl = ConfigObject(autokl_cfg["sd_autoencoder"])
 
-# データセットの定義=============================================================
+# Dataset=============================================================
 class MusicCaps(Dataset):
     def __init__(self, csv_file, audio_dir, model, x, c, transform=None):
         self.audio_dir = audio_dir
@@ -154,10 +152,9 @@ class MusicCaps(Dataset):
         self.x = x
         self.c = c
         
-        # CSVファイルを読み込む
         all_data = pd.read_csv(csv_file)
         
-        # 音声ファイルが存在するかどうかを確認し、存在するデータのみをリストに追加
+        # Checks for the existence of audio files and adds only those data that exist to the list
         for idx, row in all_data.iterrows():
             audio_path = os.path.join(self.audio_dir, f"{row['ytid']}.wav")
             if os.path.exists(audio_path):
@@ -168,12 +165,12 @@ class MusicCaps(Dataset):
 
     def __getitem__(self, idx):
         row = self.data[idx]
-        caption = row['caption'] # 生テキスト
+        caption = row['caption'] # raw text
         audio_path = os.path.join(self.audio_dir, f"{row['ytid']}.wav")    
-        waveform = torchaudio.load(audio_path) # 生波形データ（Tensor）
+        waveform = torchaudio.load(audio_path) # raw audio（Tensor）
 
         if self.x == "audio" and self.c == "text":
-            mel_latent = self.model.module.audioldm_encode(waveform[0]).detach() # メルスペクトログラム（Tensor）の潜在表現に変換
+            mel_latent = self.model.module.audioldm_encode(waveform[0]).detach() # transform mel-spectrogram（Tensor） into latent space
             text_emb = self.model.module.clip_encode_text([caption]).detach()
             return mel_latent, text_emb # data, condition
         elif self.x == "text" and self.c == "audio":
@@ -181,16 +178,17 @@ class MusicCaps(Dataset):
             audio_emb = self.model.module.clap_encode_audio(waveform[0]).detach()
             return text_latent, audio_emb # data, condition
 
-### 学習ループ=============================================
+### Training=============================================
 
-def train(x, c):
+def train():
 
-    # DDP
     parser = ArgumentParser('DDP usage example')
     parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
     args = parser.parse_args()
 
     args.is_master = args.local_rank == 0
+    x = os.environ['XTYPE']
+    c = os.environ['CTYPE']
 
     # init
     torch.cuda.set_device(args.local_rank)
@@ -198,19 +196,17 @@ def train(x, c):
 
     print(args.local_rank)
 
-    # シード固定
     torch.cuda.manual_seed_all(42)
     torch.manual_seed(42)
     np.random.seed(42)
     random.seed(42)
 
-    # モデルを定義
     print("model difine")
     model = model_define(x, c)
     model = model.to(args.local_rank)
     model = DDP(model, device_ids=[args.local_rank])
 
-    # Optimizerの定義
+    # Optimizer
     ema = LitEma(model)
     optimizer_config = {
                 'type': 'adam',
@@ -222,7 +218,6 @@ def train(x, c):
     optimizer = get_optimizer()(model, optimizer_config)
     
     print("data load")
-    # データセット
     dataset = MusicCaps(csv_file='/raid/m236866/md-mt/datasets/musiccaps/musiccaps-public.csv',
                         audio_dir='/raid/m236866/md-mt/datasets/musiccaps/musiccaps_30', 
                         model=model, 
@@ -240,7 +235,6 @@ def train(x, c):
     torch.backends.cudnn.benchmark = True
 
     print("train start")
-    # トレーニングループ
     num_epochs=2
     running_loss = 0
     for epoch in range(num_epochs):
@@ -251,10 +245,10 @@ def train(x, c):
             optimizer.zero_grad()
             data = data.to(args.local_rank)
             condition = condition.to(args.local_rank)
-            loss = model.forward(x=data, c=condition) #損失計算
+            loss = model.forward(x=data, c=condition)
             loss.backward()
             optimizer.step()
-            # EMAの更新
+            # EMA update
             ema.update(model.parameters())
 
             running_loss += loss*data.size(0)
@@ -266,7 +260,4 @@ def train(x, c):
 
 if __name__ == "__main__":
 
-    # 学習実行
-    x = "audio"
-    c = "text"
-    train(x, c)
+    train()

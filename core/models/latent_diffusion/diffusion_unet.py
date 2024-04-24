@@ -1130,10 +1130,11 @@ class UNetModelCoDi(nn.Module):
                  unet_text_cfg, # Text Unet
                  unet_audio_cfg, # Audio Unet
                  model_type,
-                 x, # data type
                  ):
 
         super().__init__()
+        import os
+        x = os.environ['XTYPE']
         
         #if 'video' in model_type or 'image' in model_type:
         #    self.unet_image = get_model()(unet_image_cfg)

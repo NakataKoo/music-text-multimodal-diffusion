@@ -74,7 +74,7 @@ openai_unet_0dmd:
     connector_output_channel: 1280
     num_heads: 8
     context_dim: 768
-    use_checkpoint: True
+    use_checkpoint: false
 
 openai_unet_codi:
   type: openai_unet_codi
@@ -83,4 +83,3 @@ openai_unet_codi:
     unet_text_cfg: MODEL(openai_unet_0dmd) # Text Unet
     unet_audio_cfg: MODEL(openai_unet_2d_audio) # Audio Unet
     model_type: ['text', 'audio'] #'video', 'image'を削除 
-    x: 'audio'
