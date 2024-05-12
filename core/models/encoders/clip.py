@@ -37,6 +37,7 @@ class FrozenCLIPTextEmbedder(AbstractEncoder):
         self.max_length = max_length   # TODO: typical value?
         self.freeze()
 
+    # パラメータ凍結
     def freeze(self):
         self.transformer = self.transformer.eval()
         #self.train = disabled_train

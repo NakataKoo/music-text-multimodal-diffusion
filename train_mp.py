@@ -261,9 +261,4 @@ def train():
     dist.destroy_process_group()
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn')
-    #mp.spawn(train, 
-    #         args=(), 
-    #         nprocs=int(os.environ["WORLD_SIZE"]), 
-    #         join=True)
     train()

@@ -151,7 +151,7 @@ class CoDi(DDPM):
     # CoDi===========================================================================================================
     
     # 学習の際に使う?
-    def forward(self, x=None, c=None, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
+    def forward(self, x=None, c=None, noise=None, xtype=os.environ["XTYPE"], ctype="prompt", u=None, return_algined_latents=False):
         if isinstance(x, list):
             t = torch.randint(0, self.num_timesteps, (x[0].shape[0],), device=x[0].device).long()
         else:

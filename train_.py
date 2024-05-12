@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import random
 from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
 from core.models import codi
 from core.models.ema import LitEma
 from core.models.common.get_optimizer import get_optimizer
@@ -171,10 +172,10 @@ class MusicCaps(Dataset):
 
         if self.x == "audio" and self.c == "text":
             mel_latent = self.model.module.audioldm_encode(waveform[0]).detach() # transform mel-spectrogram（Tensor） into latent space
-            text_emb = self.model.module.clip_encode_text([caption]).detach()
+            text_emb = self.model.module.clip_encode_text([caption]).detach().cuda()
             return mel_latent, text_emb # data, condition
         elif self.x == "text" and self.c == "audio":
-            text_latent = self.model.module.optimus_encode([caption]).detach()
+            text_latent = self.model.module.optimus_encode([caption]).detach().cuda()
             audio_emb = self.model.module.clap_encode_audio(waveform[0]).detach()
             return text_latent, audio_emb # data, condition
 
@@ -182,19 +183,11 @@ class MusicCaps(Dataset):
 
 def train():
 
-    parser = ArgumentParser('DDP usage example')
-    parser.add_argument('--local_rank', type=int, default=-1, metavar='N', help='Local process rank.')  # you need this argument in your scripts for DDP to work
+    parser = ArgumentParser()
     args = parser.parse_args()
 
-    args.is_master = args.local_rank == 0
     x = os.environ['XTYPE']
     c = os.environ['CTYPE']
-
-    # init
-    dist.init_process_group(backend='nccl', rank=args.local_rank, world_size=int(os.environ["WORLD_SIZE"]))
-    torch.cuda.set_device(args.local_rank)
-
-    print(args.local_rank)
 
     torch.cuda.manual_seed_all(42)
     torch.manual_seed(42)
@@ -203,8 +196,10 @@ def train():
 
     print("model difine")
     model = model_define(x, c)
-    model = model.to(args.local_rank)
-    model = DDP(model, device_ids=[args.local_rank])
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs!")
+        model.cuda()
+        model = nn.DataParallel(model, device_ids=[4, 5, 6, 7, 8])
 
     # Optimizer
     ema = LitEma(model)
@@ -223,14 +218,11 @@ def train():
                         model=model, 
                         x=x, 
                         c=c)
-    sampler = DistributedSampler(dataset, rank=args.local_rank)
     dataloader = DataLoader(dataset, 
-                            batch_size=6, 
-                            sampler=sampler, 
+                            batch_size=6,  
                             collate_fn=collate_fn, 
                             pin_memory=True, 
-                            num_workers=os.cpu_count(), 
-                            multiprocessing_context='spawn'
+                            num_workers=2
                             )                
 
     torch.backends.cudnn.benchmark = True
@@ -238,15 +230,13 @@ def train():
     print("train start")
     num_epochs=2
     running_loss = 0
-    model.train()
     for epoch in range(num_epochs):
-        #dist.barrier()
-        sampler.set_epoch(epoch)
+        model.train()
         for batch_idx, (data, condition) in enumerate(dataloader):
             print("epoch", epoch, "batch", batch_idx)
             optimizer.zero_grad()
-            data = data.to(args.local_rank)
-            condition = condition.to(args.local_rank)
+            data = data.cuda()
+            condition = condition.cuda()
             loss = model.forward(x=data, c=condition)
             loss.backward()
             optimizer.step()
@@ -255,15 +245,8 @@ def train():
 
             running_loss += loss*data.size(0)
             print(batch_idx)
-
-        dist.all_reduce(running_loss, op=dist.ReduceOp.SUM)
     print(running_loss)
-    dist.destroy_process_group()
 
 if __name__ == "__main__":
     mp.set_start_method('spawn')
-    #mp.spawn(train, 
-    #         args=(), 
-    #         nprocs=int(os.environ["WORLD_SIZE"]), 
-    #         join=True)
     train()
